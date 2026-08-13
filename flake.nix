@@ -53,6 +53,14 @@
         services.romm.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.romm;
       };
 
+      checks.${system} = {
+        romm = import ./checks/vm.nix {
+          inherit pkgs;
+          module = self.nixosModules.default;
+        };
+        formatting = treefmt.config.build.check self;
+      };
+
       formatter.${system} = treefmt.config.build.wrapper;
 
       devShells.${system}.default = pkgs.mkShell {
