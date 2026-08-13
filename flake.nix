@@ -26,7 +26,7 @@
     };
   };
 
-  outputs = { nixpkgs, treefmt-nix, ... }@inputs:
+  outputs = { self, nixpkgs, treefmt-nix, ... }@inputs:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -46,6 +46,11 @@
 
       overlays.default = final: _prev: {
         romm = (mkRomm final).backend;
+      };
+
+      nixosModules.default = { lib, pkgs, ... }: {
+        imports = [ ./module.nix ];
+        services.romm.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.romm;
       };
 
       formatter.${system} = treefmt.config.build.wrapper;
