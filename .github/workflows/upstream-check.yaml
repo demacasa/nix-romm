@@ -1,0 +1,34 @@
+name: Upstream release check
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: |
+          current="$(sed -n 's/^ *version = "\(.*\)";$/\1/p' package.nix | head -n1)"
+          latest="$(gh api repos/rommapp/romm/releases/latest --jq .tag_name)"
+          echo "current=$current latest=$latest"
+          [ -n "$current" ] && [ -n "$latest" ]
+          if [ "$current" = "$latest" ]; then
+            exit 0
+          fi
+          title="Update RomM to $latest"
+          if gh issue list --state open --json title --jq '.[].title' | grep -qxF "$title"; then
+            exit 0
+          fi
+          gh issue create --title "$title" \
+            --body "Upstream released [$latest](https://github.com/rommapp/romm/releases/tag/$latest); this repo packages $current. Follow the update runbook in README.md — read the release notes of every skipped version first."
