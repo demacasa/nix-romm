@@ -7,13 +7,14 @@ version-bump runbook.
 ## Consumption contract
 
 A downstream infra flake pulls `main` daily via automated `nix flake update`.
-Keep `main` green: every change goes through a PR and must pass CI (package
-build + VM test + formatting) before merge. Never push directly to `main`.
+Keep `main` green: human changes go through a PR and must pass CI (package
+build + VM test + formatting) before merge — never push directly to `main`
+yourself.
 
-PRs opened by the update-flake workflow do not trigger the CI workflow
-(GitHub does not fire `pull_request` for GITHUB_TOKEN-created PRs); that
-workflow runs `nix flake check` itself before opening the PR — treat its run
-log as the CI evidence.
+Flake-input updates are the one exception: the weekly `update-flake.yaml`
+workflow runs `nix flake update`, gates on `nix flake check -L` passing, and
+pushes `flake.lock` straight to `main` — no PR. Treat that workflow's run log
+as the CI evidence for those commits.
 
 ## Commands
 
@@ -34,4 +35,4 @@ of every skipped version. Bumps go through a PR; CI runs the VM test.
 - No code comments unless explicitly asked. Existing comments: leave alone,
   except delete or correct any your change makes false.
 - Quote flake refs containing `#` (`nix build '.#romm'`).
-- Plain git, standard PR flow.
+- Plain git, standard PR flow (except the automated weekly flake.lock push).

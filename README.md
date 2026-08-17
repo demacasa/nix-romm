@@ -60,8 +60,7 @@ All version-specific pins live at the top of `package.nix`: `version`,
    (`https://github.com/rommapp/romm/releases`). Look for warnings (MariaDB
    privileges, proxy caching), new env vars, and new subsystems.
 
-2. Refresh the vendored workspace from the upstream tag (verbatim copies;
-   treefmt reformats them):
+2. Refresh the vendored workspace from the upstream tag:
 
    ```sh
    git clone --depth 1 --branch <tag> https://github.com/rommapp/romm /tmp/romm
@@ -115,5 +114,6 @@ All version-specific pins live at the top of `package.nix`: `version`,
    repo, dump the DB before merging a version bump:
 
    ```sh
-   ssh root@romm 'mysqldump romm | zstd > /root/romm-pre-<tag>.sql.zst'
+   # on the host:
+   mysqldump romm | zstd > /root/romm-pre-<tag>.sql.zst
    ```

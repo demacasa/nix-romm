@@ -58,6 +58,18 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_unit("romm-scheduler.service")
     machine.wait_for_unit("romm-sync-watcher.service")
 
+    machine.succeed(
+        "${pkgs.mariadb}/bin/mysql romm -N -e 'SELECT version_num FROM alembic_version' | grep -qE '.'"
+    )
+
+    machine.wait_until_succeeds(
+        "journalctl -u romm-worker --no-pager | grep -qE 'Listening on.*high.*default.*low'"
+    )
+
+    machine.wait_until_succeeds(
+        "test -n \"$(${pkgs.redis}/bin/redis-cli --scan --pattern 'rq:scheduler*')\""
+    )
+
     # Backend answers on its gunicorn port (migrations ran in ExecStartPre).
     machine.wait_for_open_port(8081)
     machine.succeed("curl -fsS http://127.0.0.1:8081/api/heartbeat")
@@ -66,6 +78,9 @@ pkgs.testers.runNixOSTest {
 
     # Logo/static asset served with correct content-type (was 404 → broken image).
     machine.succeed("curl -fsS -o /dev/null -w '%{content_type}' http://localhost:8083/assets/isotipo.svg | grep -qi 'image/svg'")
+
+    machine.succeed("curl -fsS http://localhost:8083/ | grep -q '<title>RomM'")
+    machine.succeed("curl -fsS http://localhost:8083/ | grep -q 'id=\"app\"'")
 
     # OpenAPI JSON proxied to backend (was SPA HTML before nginx fix).
     machine.succeed("curl -fsS http://localhost:8083/openapi.json | grep -q '\"openapi\"'")
@@ -76,6 +91,25 @@ pkgs.testers.runNixOSTest {
 
     machine.succeed("curl -fsS -D- -o /dev/null http://localhost:8083/ | grep -i 'cache-control: no-cache'")
     machine.succeed("curl -fsS -D- -o /dev/null http://localhost:8083/assets/isotipo.svg | grep -i 'cache-control: public, max-age=3600'")
+
+    machine.succeed(
+        "test $(curl -s -o /dev/null -w '%{http_code}' http://localhost:8083/api/platforms) -eq 403"
+    )
+
+    machine.succeed("curl -fsS -c /tmp/romm-cj -o /dev/null http://localhost:8083/api/heartbeat")
+    machine.succeed(
+        "curl -fsS -b /tmp/romm-cj "
+        "-H \"x-csrftoken: $(grep romm_csrftoken /tmp/romm-cj | awk '{print $NF}')\" "
+        "-H 'Content-Type: application/json' "
+        "-d '{\"username\":\"vmtest-admin\",\"email\":\"vmtest-admin@example.com\",\"password\":\"vmtestpass123\",\"role\":\"admin\"}' "
+        "-X POST http://localhost:8083/api/users"
+    )
+    machine.succeed(
+        "curl -fsS -b /tmp/romm-cj -c /tmp/romm-cj -u vmtest-admin:vmtestpass123 -X POST http://localhost:8083/api/login"
+    )
+    machine.succeed(
+        "test $(curl -s -o /dev/null -w '%{http_code}' -b /tmp/romm-cj http://localhost:8083/api/platforms) -eq 200"
+    )
 
     # Running nginx config must forward all proxy headers (catches dropped-Host class of bug).
     # /etc/nginx/nginx.conf is present because enableReload = true; grep is deterministic
