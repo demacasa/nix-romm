@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update:
@@ -21,13 +20,22 @@ jobs:
           extra_nix_config: |
             system-features = nixos-test benchmark big-parallel kvm
       - run: nix flake update
-      - run: nix flake check -L
-      - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676
-        with:
-          branch: update-flake-lock
-          title: "chore: update flake.lock"
-          commit-message: "chore: update flake.lock"
-          body: >
-            Automated weekly flake input update. `nix flake check` (package
-            build + VM test + formatting) passed in the workflow run that
-            opened this PR.
+      - id: diff
+        run: |
+          if git diff --quiet -- flake.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.diff.outputs.changed == 'true'
+        run: nix flake check -L
+      - if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:$GH_TOKEN" | base64 -w0)"
+          git add flake.lock
+          git commit -m "chore: update flake.lock"
+          git push origin HEAD:main
