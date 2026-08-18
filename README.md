@@ -122,12 +122,13 @@ All version-specific pins live at the top of `package.nix`: `version`,
 
 ## API auth surface
 
-The repo owner's internet-facing reverse proxy blocks anonymous requests to
-RomM's API at the edge, except for an explicit allowlist of endpoints RomM
-itself treats as anonymous (login, token exchange, device pairing, ...).
-That allowlist has to track RomM's actual code across version bumps, or a
-newly-added anonymous endpoint gets a spurious 401 at the edge (this
-happened with the device-auth endpoints).
+A common deployment puts an internet-facing reverse proxy in front of RomM
+that blocks anonymous API requests at the edge, except for an explicit
+allowlist of endpoints RomM itself treats as anonymous (login, token
+exchange, device pairing, ...). Such an allowlist has to track RomM's
+actual code across version bumps, or a newly-added anonymous endpoint gets
+a spurious 401 at the edge (the device-auth pairing endpoints used by the
+Argosy client are a real example).
 
 `api-auth.nix` is the single source of truth for that allowlist, exported as
 `lib.apiAuth` for consumers to build their edge config from:
