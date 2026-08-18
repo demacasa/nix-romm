@@ -95,6 +95,8 @@ All version-specific pins live at the top of `package.nix`: `version`,
    - Alembic chain continuity when upstream squashes migrations: the
      currently deployed head must still be present under
      `backend/alembic/versions/` in the new tag.
+   - RomM's anonymous API surface, tracked in `api-auth.nix` — the VM test
+     fails the build if it drifts. See "API auth surface" below.
 
 5. Build and test (the VM test boots the full stack and runs migrations on a
    fresh DB):
@@ -117,3 +119,58 @@ All version-specific pins live at the top of `package.nix`: `version`,
    # on the host:
    mysqldump romm | zstd > /root/romm-pre-<tag>.sql.zst
    ```
+
+## API auth surface
+
+The repo owner's internet-facing reverse proxy blocks anonymous requests to
+RomM's API at the edge, except for an explicit allowlist of endpoints RomM
+itself treats as anonymous (login, token exchange, device pairing, ...).
+That allowlist has to track RomM's actual code across version bumps, or a
+newly-added anonymous endpoint gets a spurious 401 at the edge (this
+happened with the device-auth endpoints).
+
+`api-auth.nix` is the single source of truth for that allowlist, exported as
+`lib.apiAuth` for consumers to build their edge config from:
+
+```nix
+{
+  edgeExempt = [ ... ];    # anonymous endpoints an internet-facing proxy should let through
+  knownAnonymous = [ ... ]; # anonymous endpoints deliberately NOT edge-exempted
+}
+```
+
+Both lists contain path patterns for RomM's `/api/*` surface. `edgeExempt`
+is what a proxy consumes directly. `knownAnonymous` documents anonymous
+endpoints that stay behind the edge on purpose (e.g. account creation,
+password reset) — they exist so the drift check below has somewhere to put
+every anonymous route, not just the ones meant to be edge-exempt. Their
+union must exactly equal RomM's anonymous API surface: every anonymous
+route is in exactly one of the two lists (or covered by a glob in one of
+them), and every entry matches at least one real anonymous route.
+
+A pattern's trailing `*` matches any suffix, including further `/`
+segments (e.g. `/api/client-tokens/pair/*` covers
+`/api/client-tokens/pair/{code}/status`). Path-parameter segments
+(`{code}`, `{source}`, ...) are normalized to a fixed `{param}` placeholder
+before matching, in both the declared patterns and the live spec paths, so
+a param rename upstream doesn't by itself count as drift.
+
+`checks/vm.nix`'s VM test enforces the invariant: it fetches
+`/openapi.json` from the running backend, computes the set of anonymous
+operations (HTTP GET/POST/PUT/PATCH/DELETE operations with no `security`
+key — RomM's `protected_route` decorator is what adds that key), and
+asserts both directions against `api-auth.nix`:
+
+- every anonymous path in the spec is covered by some pattern in
+  `edgeExempt` or `knownAnonymous` (catches new anonymous endpoints);
+- every pattern in `edgeExempt` or `knownAnonymous` matches at least one
+  anonymous path in the spec (catches stale entries from routes upstream
+  removed or renamed).
+
+If the VM test fails with an uncovered path after a version bump: read the
+new endpoint's code to confirm it's genuinely meant to be anonymous, then
+add it to `edgeExempt` if an internet-facing proxy should let it through
+pre-auth, or to `knownAnonymous` if it should stay behind the edge. Changes
+to `edgeExempt` flow to consumers automatically the next time they pull
+this flake's `lib.apiAuth`. If the test instead fails on a stale pattern,
+remove the entry that no longer matches anything.

@@ -30,6 +30,12 @@ as the CI evidence for those commits.
 Follow the runbook in README.md exactly, including reading the release notes
 of every skipped version. Bumps go through a PR; CI runs the VM test.
 
+`api-auth.nix` is the source of truth for RomM's anonymous API surface,
+consumed by a downstream reverse proxy allowlist. The VM test fails the
+build if a version bump adds, removes, or renames an anonymous endpoint
+without a matching update to `api-auth.nix`. See README.md's "API auth
+surface" for the classification rule and how to fix a failing drift check.
+
 ## Conventions
 
 - No code comments unless explicitly asked. Existing comments: leave alone,
