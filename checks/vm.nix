@@ -1,4 +1,4 @@
-{ pkgs, module }:
+{ pkgs, module, apiAuth }:
 
 # Boots a single node with the RomM module + createLocally MariaDB + Redis,
 # and asserts that:
@@ -118,5 +118,56 @@ pkgs.testers.runNixOSTest {
     machine.succeed("grep -q 'proxy_set_header X-Forwarded-For' /etc/nginx/nginx.conf")
     machine.succeed("grep -q 'proxy_set_header X-Real-IP' /etc/nginx/nginx.conf")
     machine.succeed("grep -q 'proxy_set_header X-Forwarded-Proto' /etc/nginx/nginx.conf")
+
+    import fnmatch
+    import json
+    import re
+
+    api_auth = json.loads('${builtins.toJSON apiAuth}')
+    declared_patterns = api_auth["edgeExempt"] + api_auth["knownAnonymous"]
+
+    def normalize(path):
+        path = re.sub(r"\{[^{}]*\}", "{param}", path)
+        return path if path.startswith("/api") else "/api" + path
+
+    spec = json.loads(machine.succeed("curl -fsS http://localhost:8083/openapi.json"))
+
+    anonymous_paths = sorted(
+        {
+            path
+            for path, operations in spec["paths"].items()
+            if path.startswith("/api")
+            for method, operation in operations.items()
+            if method.lower() in ("get", "post", "put", "patch", "delete")
+            if "security" not in operation
+        }
+    )
+
+    def covered(path, patterns):
+        normalized_path = normalize(path)
+        return any(
+            fnmatch.fnmatchcase(normalized_path, normalize(pattern))
+            for pattern in patterns
+        )
+
+    uncovered = [p for p in anonymous_paths if not covered(p, declared_patterns)]
+    assert not uncovered, (
+        "anonymous /openapi.json paths not covered by edgeExempt or knownAnonymous "
+        "in api-auth.nix (classify each into a bucket, see README's "
+        "'API auth surface'): " + ", ".join(uncovered)
+    )
+
+    stale = [
+        pattern
+        for pattern in declared_patterns
+        if not any(
+            fnmatch.fnmatchcase(normalize(p), normalize(pattern))
+            for p in anonymous_paths
+        )
+    ]
+    assert not stale, (
+        "api-auth.nix patterns matching no anonymous /openapi.json path "
+        "(stale entries, remove them): " + ", ".join(stale)
+    )
   '';
 }

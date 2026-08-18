@@ -37,12 +37,16 @@
       };
 
       treefmt = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
+
+      apiAuth = import ./api-auth.nix;
     in
     {
       packages.${system} = rec {
         romm = (mkRomm pkgs).backend;
         default = romm;
       };
+
+      lib.apiAuth = apiAuth;
 
       overlays.default = final: _prev: {
         romm = (mkRomm final).backend;
@@ -55,7 +59,7 @@
 
       checks.${system} = {
         romm = import ./checks/vm.nix {
-          inherit pkgs;
+          inherit pkgs apiAuth;
           module = self.nixosModules.default;
         };
         formatting = treefmt.config.build.check self;
