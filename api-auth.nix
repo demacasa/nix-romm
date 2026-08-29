@@ -8,7 +8,6 @@
     "/api/auth/device/token"
   ];
   knownAnonymous = [
-    "/api/login"
     "/api/logout"
     "/api/login/openid"
     "/api/oauth/openid"

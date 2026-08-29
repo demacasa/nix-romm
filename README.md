@@ -159,8 +159,10 @@ a param rename upstream doesn't by itself count as drift.
 `checks/vm.nix`'s VM test enforces the invariant: it fetches
 `/openapi.json` from the running backend, computes the set of anonymous
 operations (HTTP GET/POST/PUT/PATCH/DELETE operations with no `security`
-key — RomM's `protected_route` decorator is what adds that key), and
-asserts both directions against `api-auth.nix`:
+key — FastAPI adds that key for any declared security scheme, whether
+RomM's `protected_route` decorator or a direct dependency like the
+`HTTPBasic` on `/api/login`, which therefore does not count as
+anonymous), and asserts both directions against `api-auth.nix`:
 
 - every anonymous path in the spec is covered by some pattern in
   `edgeExempt` or `knownAnonymous` (catches new anonymous endpoints);
